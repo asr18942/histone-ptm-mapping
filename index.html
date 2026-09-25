@@ -35,6 +35,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;padding-inline:16px}
 header.top{max-width:1560px;margin:0 auto;padding-block:20px 4px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px}
 header.top h1{font-family:var(--cond);font-weight:600;font-size:22px;letter-spacing:.01em;margin:0}
@@ -99,6 +100,9 @@ button.ghost:hover{color:var(--accent)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:8px 14px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s}
 .toast.show{opacity:1}
 .mx{margin-top:14px}
+.mx-source{margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+#mxTableBox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:10px}
+input[type=file]{font:inherit;font-size:12.5px;max-width:100%;color:var(--ink)}
 .mx-controls{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(170px,100%),1fr));gap:10px 12px}
 .mx-checks{grid-template-columns:repeat(auto-fill,minmax(min(160px,100%),1fr));margin-top:12px}
 .mx-colors{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
@@ -218,10 +222,27 @@ button.ghost:hover{color:var(--accent)}
     <section class="card mx" aria-labelledby="h-mx">
       <h2 id="h-mx">Proteoform matrix <span class="count" id="mxCount"></span></h2>
       <p class="help" style="margin:0 0 12px">One row per line in Detected peptides, plus one row per extra modification site; one column per modified site. Black dots are sites detected unmodified; coloured dots show the mark carried by that proteoform. Write N-terminal marks before the first residue: <code>[ac]-S[ph]GRGK…</code></p>
+      <div class="mx-source">
+        <div class="row">
+          <div><label for="mxSource">Matrix input</label>
+            <select id="mxSource"><option value="peps">Detected peptides &amp; extra sites</option><option value="table">Proteoform table (CSV)</option></select></div>
+        </div>
+        <div id="mxTableBox" class="stack" hidden>
+          <div class="row">
+            <div><label for="mxFile">Proteoform table (.csv)</label><input id="mxFile" type="file" accept=".csv,.tsv,.txt,text/csv"></div>
+            <div><label for="mxProtein">Protein</label><select id="mxProtein"></select></div>
+          </div>
+          <p class="help" id="mxTableInfo" style="margin:0"></p>
+          <div class="checks mx-checks" style="margin-top:0">
+            <label><input type="checkbox" id="mxSkipZero"> Skip MS score 0</label>
+            <label><input type="checkbox" id="mxStats"> SC % and MS score columns</label>
+          </div>
+        </div>
+      </div>
       <div class="mx-controls">
         <div><label for="mxLabel">Protein label</label><input id="mxLabel" type="text" placeholder="e.g. H2A"></div>
         <div><label for="mxCols">Columns (blank = all modified sites)</label><input id="mxCols" type="text" placeholder="S1 K5 K8 K10 K14 R16 M54"></div>
-        <div><label for="mxOrder">Row order</label><select id="mxOrder"><option value="typed">As typed</option><option value="position">By position</option></select></div>
+        <div><label for="mxOrder">Row order</label><select id="mxOrder"><option value="typed">As typed / file order</option><option value="position">By position</option><option value="score">By MS score (table)</option></select></div>
         <div><label for="mxNumEvery">Number rows every</label><input id="mxNumEvery" type="number" min="1" max="100"></div>
         <div><label for="mxDot">Dot size <span id="mxDotVal"></span></label><input id="mxDot" type="range" min="5" max="24" step="1"></div>
         <div><label for="mxColW">Column spacing <span id="mxColWVal"></span></label><input id="mxColW" type="range" min="14" max="80" step="1"></div>
@@ -231,9 +252,9 @@ button.ghost:hover{color:var(--accent)}
         <label><input type="checkbox" id="mxC"> C-terminus column</label>
         <label><input type="checkbox" id="mxHeader"> Schematic header</label>
         <label><input type="checkbox" id="mxLegend"> Legend</label>
-        <label><input type="checkbox" id="mxSiteRows"> Extra sites as rows</label>
-        <label><input type="checkbox" id="mxHideEmpty"> Hide rows without sites</label>
-        <label><input type="checkbox" id="mxComplete"> Complete lines (N to C)</label>
+        <label class="peps-only"><input type="checkbox" id="mxSiteRows"> Extra sites as rows</label>
+        <label class="peps-only"><input type="checkbox" id="mxHideEmpty"> Hide rows without sites</label>
+        <label class="peps-only"><input type="checkbox" id="mxComplete"> Complete lines (N to C)</label>
       </div>
       <div class="mx-colors" id="mxColors"></div>
     </section>
@@ -315,7 +336,9 @@ const ALIAS = {me:"me1",me1:"me1",methyl:"me1",monomethyl:"me1",methylation:"me1
   ub:"ub",gg:"ub",ubi:"ub",ubiquitin:"ub",ubiquityl:"ub",ubiquitination:"ub",
   cr:"cr",crot:"cr",crotonyl:"cr",pr:"pr",prop:"pr",propionyl:"pr",bu:"bu",but:"bu",butyryl:"bu",
   su:"su",succ:"su",succinyl:"su",la:"la",lac:"la",lactyl:"la",kla:"la",hib:"hib",
-  cit:"cit",ci:"cit",citrulline:"cit",citrullination:"cit",deim:"cit",o:"ox",ox:"ox",oxidation:"ox",oxidized:"ox"};
+  cit:"cit",ci:"cit",citrulline:"cit",citrullination:"cit",deim:"cit",o:"ox",ox:"ox",oxidation:"ox",oxidized:"ox",
+  ace:"ac",dim:"me2",tri:"me3",met:"me1",dimethylation:"me2",trimethylation:"me3",monomethylation:"me1",
+  phosphorylated:"ph",acetylated:"ac",methylated:"me1",dimethylated:"me2",trimethylated:"me3"};
 const CUSTOM_FILLS = ["#6d5dd3","#c2582b","#2b7bb9","#8f3f97","#3a8f6f","#b08a1e","#595f6e"];
 const CUSTOM = {};
 const PEP_PAL = ["#2b59c3","#d1495b","#00798c","#c98a1b","#4f9a62","#8e5572","#3d405b","#e07a5f"];
@@ -345,7 +368,7 @@ const DEFAULTS = {
   peps:EXAMPLE_PEPS, sites:"K27me3, K36me3", example:true,
   blockSize:5, blocksPerRow:10, fontSize:18, iconSize:22, fontFamily:"Arial, Helvetica, sans-serif",
   pepColorMode:"single", lineColor:"#1c2b4a", dim:true, merge:true, showNumbers:true, showCoverage:true, showLegend:true, boldCovered:false,
-  mxLabel:"", mxCols:"", mxOrder:"typed", mxNumEvery:10, mxDot:10, mxColW:30, mxN:true, mxC:true, mxHeader:true, mxLegend:true, mxSiteRows:true, mxHideEmpty:true, mxComplete:true, mxColors:{}
+  mxLabel:"", mxCols:"", mxOrder:"typed", mxNumEvery:10, mxDot:10, mxColW:30, mxN:true, mxC:true, mxHeader:true, mxLegend:true, mxSiteRows:true, mxHideEmpty:true, mxComplete:true, mxSource:"peps", mxCsv:"", mxFileName:"", mxProtein:"", mxSkipZero:true, mxStats:true, mxColors:{}
 };
 const KEY = "histone-ptm-map-v1";
 let state = Object.assign({}, DEFAULTS);
@@ -353,8 +376,8 @@ try{ const s = JSON.parse(localStorage.getItem(KEY)||"null"); if(s) state = Obje
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
 
 const $ = id => document.getElementById(id);
-const FIELDS = ["preset","title","seq","start","peps","sites","blockSize","blocksPerRow","fontSize","iconSize","mxLabel","mxCols","mxOrder","mxNumEvery","mxDot","mxColW","fontFamily","pepColorMode","lineColor"];
-const CHECKS = ["dim","merge","showNumbers","showCoverage","showLegend","boldCovered","mxN","mxC","mxHeader","mxLegend","mxSiteRows","mxHideEmpty","mxComplete"];
+const FIELDS = ["preset","title","seq","start","peps","sites","blockSize","blocksPerRow","fontSize","iconSize","mxLabel","mxCols","mxOrder","mxNumEvery","mxDot","mxColW","mxSource","fontFamily","pepColorMode","lineColor"];
+const CHECKS = ["dim","merge","showNumbers","showCoverage","showLegend","boldCovered","mxN","mxC","mxHeader","mxLegend","mxSiteRows","mxHideEmpty","mxComplete","mxSkipZero","mxStats"];
 function syncInputs(){
   FIELDS.forEach(f=>{ $(f).value = state[f]; });
   CHECKS.forEach(f=>{ $(f).checked = !!state[f]; });
@@ -613,10 +636,11 @@ function renderSVG(M, interactive){
 /* ---------- proteoform matrix ---------- */
 const MX_DEFAULT = {ac:"#f28c28", ph:"#b9478b", me1:"#f3e03b", me2:"#6cbf45", me3:"#2d7a31", ox:"#d23c3c"};
 function mxColor(k){ return (state.mxColors||{})[k] || MX_DEFAULT[k] || modDef(k).fill; }
-function mxProteinLabel(){
+function mxProteinLabel(X){
   if(state.mxLabel.trim()) return state.mxLabel.trim();
-  const m = state.title.match(/\bH(?:2A|2B|1|3|4)(?:\.\w+)?/i);
-  return m ? m[0] : state.title.trim();
+  const src = (X && X.protein) || state.title;
+  const m = src.match(/\bH(?:2A|2B|1|3|4)(?:\.\w+)?/i);
+  return m ? m[0] : src.trim().slice(0,6);
 }
 function buildMatrix(M){
   const warn = [];
@@ -665,6 +689,109 @@ function buildMatrix(M){
   const used = new Set(); cols.forEach(c=>colKeys(c).forEach(k=>used.add(k)));
   return {rows, cols, cell, colKeys, warn, hidden, used:[...used].sort((a,b)=>modRank(a)-modRank(b))};
 }
+/* ---------- proteoform table import (e.g. top-down search exports) ---------- */
+function parseCSV(text){
+  text = text.replace(/^﻿/, "");
+  const first = text.split(/\r?\n/, 1)[0] || "";
+  const delim = (first.split("\t").length > first.split(",").length) ? "\t" : ",";
+  const rows = []; let row = [], f = "", q = false;
+  for(let i=0;i<text.length;i++){
+    const ch = text[i];
+    if(q){
+      if(ch === '"'){ if(text[i+1] === '"'){ f += '"'; i++; } else q = false; }
+      else f += ch;
+    }
+    else if(ch === '"') q = true;
+    else if(ch === delim){ row.push(f); f = ""; }
+    else if(ch === "\n"){ row.push(f); rows.push(row); row = []; f = ""; }
+    else if(ch !== "\r") f += ch;
+  }
+  if(f || row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()));
+}
+// "K5, K8, K16 Acetyl\nK12 Methyl" -> [{res:"K",pos:5,key:"ac"}, …]
+function parseVarMods(str){
+  const mods = [], bad = [];
+  String(str||"").split(/\r?\n|;/).map(l=>l.trim()).filter(Boolean).forEach(line=>{
+    const sites = [], name = [];
+    line.split(/[\s,]+/).filter(Boolean).forEach(t=>{
+      let m;
+      if(!name.length && (m = t.match(/^([A-Za-z])(\d+)$/))) sites.push({res:m[1].toUpperCase(), pos:+m[2]});
+      else if(!name.length && /^[NC]-?term(inus|inal)?$/i.test(t)) sites.push({term:t[0].toUpperCase()});
+      else name.push(t);
+    });
+    if(!sites.length || !name.length){ bad.push(line); return; }
+    const key = resolveMod(name.join(" "));
+    sites.forEach(x=>mods.push(Object.assign({key}, x)));
+  });
+  return {mods, bad};
+}
+const _tableCache = {text:null, val:null};
+function mxTable(){
+  const text = state.mxCsv || "";
+  if(!text.trim()) return null;
+  if(_tableCache.text === text) return _tableCache.val;
+  const all = parseCSV(text), warn = [];
+  const hdr = (all[0]||[]).map(h=>h.trim().toLowerCase());
+  const col = test => hdr.findIndex(test);
+  const iMods = col(h=>/var\.?\s*mod/.test(h)), iSC = col(h=>/^sc\b|sequence coverage/.test(h));
+  const iScore = col(h=>/ms\s*score/.test(h)), iProt = col(h=>/protein/.test(h));
+  const num = v => { const x = parseFloat(v); return isFinite(x) ? x : NaN; };
+  let rows = [];
+  if(iMods < 0) warn.push('No "Var. mods" column found in the table.');
+  else {
+    if(iSC < 0) warn.push('No "SC [%]" column found — coverage will show as –.');
+    if(iScore < 0) warn.push('No "MS Score" column found — score will show as –.');
+    rows = all.slice(1).map((r,k)=>{
+      const pm = parseVarMods(r[iMods]);
+      pm.bad.forEach(b=>warn.push(`Table row ${k+2}: couldn't read modification "${b}".`));
+      const name = iProt>=0 ? (r[iProt]||"").trim() : "";
+      // "…histone H4 [Aedes aegypti]_K5[Ace]_K16[Ace]" -> "…histone H4 [Aedes aegypti]"
+      const base = name.replace(/(_[A-Za-z]\d+\[[^\]]*\])+$/, "") || "(unnamed protein)";
+      return {base, mods:pm.mods, sc:iSC>=0 ? num(r[iSC]) : NaN, score:iScore>=0 ? num(r[iScore]) : NaN};
+    });
+  }
+  const proteins = [...new Set(rows.map(r=>r.base))];
+  const scored = b => rows.filter(r=>r.base===b && r.score>0).length;
+  const defaultProtein = proteins.slice().sort((a,b)=>scored(b)-scored(a))[0] || "";
+  const val = {rows, proteins, defaultProtein, warn};
+  _tableCache.text = text; _tableCache.val = val;
+  return val;
+}
+function tableProtein(T){ return T.proteins.includes(state.mxProtein) ? state.mxProtein : T.defaultProtein; }
+function buildTableMatrix(){
+  const T = mxTable();
+  const empty = {rows:[], cols:[], cell:()=>null, colKeys:()=>[], warn:[], hidden:0, skipped:0, used:[], table:true, stats:false,
+    empty:"Choose a proteoform table (.csv) above to build the matrix."};
+  if(!T) return empty;
+  const warn = T.warn.slice(), prot = tableProtein(T);
+  let list = T.rows.filter(r=>r.base===prot), skipped = 0;
+  if(state.mxSkipZero){ const n0 = list.length; list = list.filter(r=>r.score!==0); skipped = n0 - list.length; }
+  if(state.mxOrder==="score") list = list.slice().sort((a,b)=>(isNaN(b.score)?-1:b.score)-(isNaN(a.score)?-1:a.score));
+  const rows = list.map((r,k)=>({mods:r.mods, sc:r.sc, score:r.score, li:k}));
+  const found = new Map(); rows.forEach(p=>p.mods.forEach(m=>{ if(!m.term) found.set(m.pos, m.res); }));
+  let sites = [];
+  if(state.mxCols.trim()){
+    siteTokens(state.mxCols).forEach(t=>{
+      const m = t.match(/^([A-Za-z])?(\d+)$/);
+      if(!m){ warn.push(`Column "${t}": write it like K9 or 9.`); return; }
+      const pos = +m[2], res = (m[1] || found.get(pos) || "").toUpperCase();
+      if(!sites.some(x=>x.pos===pos)) sites.push({pos, res});
+    });
+  } else sites = [...found].map(([pos,res])=>({pos,res}));
+  sites.sort((a,b)=>a.pos-b.pos);
+  const cols = [];
+  if(state.mxN) cols.push({t:"N", label:"N"});
+  sites.forEach(x=>cols.push({t:"R", i:x.pos, label:x.res + x.pos}));
+  if(state.mxC) cols.push({t:"C", label:"C"});
+  // intact proteoforms span the whole protein: every column is detected, modified or not
+  const ks = arr => [...new Set(arr.map(m=>m.key))].sort((a,b)=>modRank(a)-modRank(b));
+  const cell = (p,c)=> c.t==="R" ? ks(p.mods.filter(m=>!m.term && m.pos===c.i)) : ks(p.mods.filter(m=>m.term===c.t));
+  const colKeys = c => { const set = new Set(); rows.forEach(p=>cell(p,c).forEach(k=>set.add(k))); return [...set].sort((a,b)=>modRank(a)-modRank(b)); };
+  const used = new Set(); cols.forEach(c=>colKeys(c).forEach(k=>used.add(k)));
+  return {rows, cols, cell, colKeys, warn, hidden:0, skipped, table:true, protein:prot, stats:state.mxStats,
+    used:[...used].sort((a,b)=>modRank(a)-modRank(b)), empty: rows.length ? "" : "No proteoforms left for this protein — try unticking “Skip MS score 0”."};
+}
 function renderMatrix(M, X){
   const d = +state.mxDot||10, r = d/2, colW = Math.max(+state.mxColW||30, d*1.4), rowP = d*1.3, font = state.fontFamily;
   const lf = Math.max(9, d*1.1), ink = "#15181f";
@@ -675,11 +802,14 @@ function renderMatrix(M, X){
   const ballR = Math.min(Math.max(d*1.5, lf*1.3), Math.max(colW*0.62, d*2));
   const cGap = (state.mxHeader && nC>=2 && X.cols[nC-1].t==="C") ? ballR*2 + d*0.6 : 0;
   const colX = j => x0 + j*colW + colW/2 + (X.cols[j] && X.cols[j].t==="C" ? cGap : 0);
-  let W = Math.ceil(x0 + Math.max(1,nC)*colW + cGap + padX);
+  // optional SC % / MS score columns after the last site column
+  const statW = X.stats ? lf*4.6 : 0, statX0 = x0 + Math.max(1,nC)*colW + cGap + lf*0.6;
+  const statX = k => statX0 + statW*k + statW/2;
+  let W = Math.ceil(x0 + Math.max(1,nC)*colW + cGap + (X.stats ? lf*0.6 + statW*2 : 0) + padX);
   const out = [];
   let y = lf*0.8;
-  if(!nC || !X.rows.length){
-    out.push(`<text x="${f1(padX)}" y="${f1(y+lf)}" font-size="${f1(lf)}" fill="#7b818d">${!X.rows.length?"Add peptides above to build the matrix.":"No modified sites yet — add PTMs to your peptides or list columns."}</text>`);
+  if(!nC || !X.rows.length || X.empty){
+    out.push(`<text x="${f1(padX)}" y="${f1(y+lf)}" font-size="${f1(lf)}" fill="#7b818d">${esc(X.empty || (!X.rows.length?"Add peptides above to build the matrix.":"No modified sites yet — add PTMs to your peptides or list columns."))}</text>`);
     W = Math.max(W, 420); y += lf*2;
   } else {
     if(state.mxHeader){
@@ -698,19 +828,21 @@ function renderMatrix(M, X){
         maxStack = Math.max(maxStack, arr.length);
         arr.forEach((k,m)=>out.push(iconSVG(k, colX(j), lineY + m*(is*1.08), is, font)));
       });
-      const bl = mxProteinLabel();
+      const bl = mxProteinLabel(X);
       out.push(`<circle cx="${f1(bx)}" cy="${f1(lineY)}" r="${f1(ballR)}" fill="#dc5a78" stroke="#a52f4f" stroke-width="${f1(Math.max(1,ballR*0.08))}"/>`);
       if(bl){ const bf = Math.min(ballR*0.75, ballR*2.6/Math.max(2,bl.length)); out.push(`<text x="${f1(bx)}" y="${f1(lineY+bf*0.36)}" font-size="${f1(bf)}" font-weight="700" text-anchor="middle" fill="#ffffff">${esc(bl)}</text>`); }
       y = Math.max(lineY + ballR, lineY + (maxStack ? (maxStack-1)*is*1.08 + is/2 : 0)) + lf*1.1;
     }
     X.cols.forEach((c,j)=>out.push(`<text x="${f1(colX(j))}" y="${f1(y+lf)}" font-size="${f1(lf)}" font-weight="700" text-anchor="middle" fill="${ink}">${esc(c.label)}</text>`));
+    if(X.stats) ["SC %","MS score"].forEach((t,k)=>out.push(`<text x="${f1(statX(k))}" y="${f1(y+lf)}" font-size="${f1(lf)}" font-weight="700" text-anchor="middle" fill="${ink}">${t}</text>`));
     y += lf*1.5;
     const sw = Math.max(1, d*0.16), dsw = Math.max(0.6, d*0.07);
     X.rows.forEach((p,k)=>{
       const cy = y + k*rowP + rowP/2;
       if(k===0 || (k+1)%every===0) out.push(`<text x="${f1(x0 - lf*0.5)}" y="${f1(cy+lf*0.35)}" font-size="${f1(lf)}" font-weight="700" text-anchor="end" fill="${ink}">${k+1}</text>`);
       // complete rows: every proteoform spans N→C with a dot in every column (uncovered sites drawn as unmodified)
-      const present = X.cols.map((c,j)=>({j, ks:X.cell(p,c) || (state.mxComplete ? [] : null)})).filter(o=>o.ks);
+      const present = X.cols.map((c,j)=>({j, ks:X.cell(p,c) || ((state.mxComplete || X.table) ? [] : null)})).filter(o=>o.ks);
+      if(X.stats) [p.sc, p.score].forEach((v,k)=>out.push(`<text x="${f1(statX(k))}" y="${f1(cy+lf*0.35)}" font-size="${f1(lf)}" text-anchor="middle" fill="${ink}">${isNaN(v) ? "–" : v.toFixed(1)}</text>`));
       if(present.length>1) out.push(`<line x1="${f1(colX(present[0].j))}" y1="${f1(cy)}" x2="${f1(colX(present[present.length-1].j))}" y2="${f1(cy)}" stroke="${ink}" stroke-width="${f1(sw)}"/>`);
       present.forEach(({j,ks})=>{
         const cx = colX(j);
@@ -747,10 +879,15 @@ function renderMatrix(M, X){
 }
 let mxX = null, mxColorKeys = null;
 function renderMx(){
-  mxX = buildMatrix(model);
+  const fromTable = state.mxSource==="table";
+  $("mxTableBox").hidden = !fromTable;
+  document.querySelectorAll(".peps-only").forEach(el=>{ el.hidden = fromTable; });
+  if(fromTable) syncTableUI();
+  mxX = fromTable ? buildTableMatrix() : buildMatrix(model);
   $("mxPaper").innerHTML = renderMatrix(model, mxX);
   const nSites = mxX.cols.filter(c=>c.t==="R").length;
-  $("mxCount").textContent = `${mxX.rows.length} rows × ${nSites} sites` + (mxX.hidden ? ` · ${mxX.hidden} without sites hidden` : "");
+  $("mxCount").textContent = `${mxX.rows.length} ${fromTable?"proteoforms":"rows"} × ${nSites} sites` +
+    (mxX.hidden ? ` · ${mxX.hidden} without sites hidden` : "") + (mxX.skipped ? ` · ${mxX.skipped} with score 0 skipped` : "");
   const w = $("mxWarnings");
   if(mxX.warn.length){ w.hidden=false; w.innerHTML = `<b>Matrix inputs need attention</b><ul>${mxX.warn.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`; } else w.hidden = true;
   const keys = mxX.used.join("|");
@@ -763,6 +900,21 @@ function renderMx(){
     }));
   }
   $("mxPngOut").hidden = true; $("mxSvgOut").hidden = true;
+}
+
+let mxProteinOpts = null;
+function syncTableUI(){
+  const T = mxTable(), sel = $("mxProtein");
+  const opts = T ? T.proteins.join("\n") : "";
+  if(opts !== mxProteinOpts){
+    mxProteinOpts = opts;
+    sel.innerHTML = T ? T.proteins.map(pn=>`<option>${esc(pn)}</option>`).join("") : "";
+  }
+  sel.disabled = !T || T.proteins.length < 2;
+  if(T) sel.value = tableProtein(T);
+  $("mxTableInfo").textContent = T
+    ? `${state.mxFileName ? state.mxFileName + " · " : ""}${T.rows.length} proteoforms from ${T.proteins.length} protein${T.proteins.length===1?"":"s"}. Rows come from the Var. mods column.`
+    : "Export the proteoforms table as CSV. Each row's Var. mods (e.g. “K5, K8 Acetyl” / “R17 Dimethyl”) becomes one matrix row.";
 }
 
 /* ---------- render ---------- */
@@ -808,6 +960,18 @@ FIELDS.forEach(f=>{
   });
 });
 CHECKS.forEach(f=>$(f).addEventListener("change", e=>{ state[f]=e.target.checked; render(); }));
+$("mxProtein").addEventListener("change", e=>{ state.mxProtein = e.target.value; render(); });
+$("mxFile").addEventListener("change", e=>{
+  const file = e.target.files && e.target.files[0]; if(!file) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    state.mxCsv = String(rd.result||""); state.mxFileName = file.name; state.mxProtein = ""; state.mxSource = "table";
+    syncInputs(); render();
+    const T = mxTable(); toast(T && T.rows.length ? `Loaded ${T.rows.length} proteoforms` : "No proteoforms found in that file");
+  };
+  rd.onerror = ()=>toast("Couldn't read that file");
+  rd.readAsText(file);
+});
 $("clearPeps").addEventListener("click", ()=>{ state.peps=""; state.sites=""; state.example=false; syncInputs(); render(); toast("Peptides and sites cleared"); });
 
 /* ---------- figure interaction ---------- */

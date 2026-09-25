@@ -40,6 +40,18 @@ K27me3, K36me2, Ntac K5ac K8ac, K8ac M54ox
 
 **Mark names** – `me1 me2 me3 ac ph ox (O) ub cr pr bu su la hib cit`, full names (`acetyl`, `trimethyl`, …) or any custom label.
 
+## Proteoform matrix from a proteoform table
+
+In the matrix section set **Matrix input** to *Proteoform table (CSV)* and choose the exported proteoforms table
+(e.g. a top-down search `…_proteoforms_table.csv`). The app reads:
+
+- **Var. mods** – one matrix row per table row, e.g. `K5, K8, K16 Acetyl` / `K12 Methyl` / `R17 Dimethyl` (one mark per line)
+- **SC [%]** and **MS Score [a.u.]** – shown as columns at the end of each row
+- **Protein Name** – pick the protein when the table has several; the header ball label comes from it (e.g. H4)
+
+Rows with an MS score of 0 are skipped by default (untick *Skip MS score 0* to show them).
+Sort by file order or by MS score.
+
 ## Exporting
 
 - **Copy SVG** – paste straight into Illustrator, Inkscape or PowerPoint.
