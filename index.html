@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Build bottom-up histone PTM coverage figures and proteoform matrices.">
+<title>Histone PTM Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+:root{
+  --ground:#eceef3; --panel:#ffffff; --panel-2:#f5f6fa; --ink:#161a23; --muted:#5a6173; --faint:#8a90a0;
+  --line:#d7dae3; --accent:#2f43c4; --accent-soft:#e3e7fb; --accent-ink:#ffffff;
+  --warn:#9a5a00; --warn-bg:#fff4e0; --ok:#1d7a48;
+  --shadow:0 1px 2px rgba(20,24,40,.06),0 4px 16px rgba(20,24,40,.06);
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#101218; --panel:#181b24; --panel-2:#1f2330; --ink:#e7e9f0; --muted:#a0a6b8; --faint:#737a8e;
+    --line:#2d3242; --accent:#8b9bff; --accent-soft:#252c52; --accent-ink:#0f1330;
+    --warn:#f2b35c; --warn-bg:#2d2415; --ok:#5fd394;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#101218; --panel:#181b24; --panel-2:#1f2330; --ink:#e7e9f0; --muted:#a0a6b8; --faint:#737a8e;
+  --line:#2d3242; --accent:#8b9bff; --accent-soft:#252c52; --accent-ink:#0f1330;
+  --warn:#f2b35c; --warn-bg:#2d2415; --ok:#5fd394;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;padding-inline:16px}
+header.top{max-width:1560px;margin:0 auto;padding-block:20px 4px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px}
+header.top h1{font-family:var(--cond);font-weight:600;font-size:22px;letter-spacing:.01em;margin:0}
+header.top p{margin:0;color:var(--muted)}
+.app{max-width:1560px;margin:0 auto;padding-block:14px 40px;display:grid;grid-template-columns:minmax(0,370px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:920px){.app{grid-template-columns:minmax(0,1fr)}}
+.side{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.card h2{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card h2 .count{font-family:var(--mono);text-transform:none;letter-spacing:0;font-weight:400;color:var(--faint)}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 120px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:10px}
+input[type=text],input[type=number],select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:6px 8px}
+textarea{font-family:var(--mono);font-size:12.5px;line-height:1.5;resize:vertical}
+#seq{min-height:92px;word-break:break-all}
+#peps{min-height:190px}
+#sites{min-height:56px}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.help{font-size:12px;color:var(--muted);margin:6px 0 0}
+.help code{font-family:var(--mono);font-size:11.5px;background:var(--panel-2);border:1px solid var(--line);border-radius:3px;padding:0 3px;white-space:nowrap}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+.checks label{display:flex;gap:6px;align-items:center;color:var(--ink);font-size:13px;margin:0;cursor:pointer}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=color]{width:100%;height:32px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);padding:2px}
+button{font:inherit;font-size:13px;border-radius:5px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 11px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:500}
+button.ghost{border-color:transparent;background:transparent;color:var(--muted);padding:2px 6px;font-size:12px}
+button.ghost:hover{color:var(--accent)}
+.warnings{background:var(--warn-bg);color:var(--warn);border-radius:6px;padding:8px 10px;font-size:12.5px}
+.warnings ul{margin:4px 0 0;padding-left:18px}
+.main{display:flex;flex-direction:column;gap:12px;min-width:0}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.stat{display:flex;align-items:baseline;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+.stat b{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:12px}
+.hint{color:var(--muted);font-size:12.5px;margin-left:auto}
+.paper-wrap{position:relative}
+.paper{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);overflow-x:auto;user-select:none;-webkit-user-select:none;touch-action:pan-y}
+.paper svg{display:block}
+.paper .hit{fill:transparent;cursor:pointer}
+.paper .hit:hover{fill:rgba(47,67,196,.07)}
+.paper .hit.sel{fill:rgba(47,67,196,.16)}
+.pop{position:absolute;z-index:5;width:272px;max-width:calc(100vw - 40px);background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 30px rgba(10,14,30,.22);padding:12px}
+.pop h3{margin:0 0 2px;font-family:var(--mono);font-size:15px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.pop .sub{font-size:12px;color:var(--muted);margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px 3px 4px;border-radius:999px;font-size:12.5px;font-family:var(--mono)}
+.chip.on{background:var(--accent-soft);border-color:var(--accent)}
+.chip.locked{opacity:.65;cursor:default}
+.chip svg{flex:none}
+.pop .custom{display:flex;gap:6px;margin-top:10px}
+.pop .custom input{flex:1}
+.export{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.export .sep{width:1px;height:22px;background:var(--line)}
+.png-out{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+.png-out img{display:block;max-width:100%;height:auto;border:1px solid var(--line);background:#fff}
+.png-out p{margin:0 0 8px;color:var(--muted);font-size:12.5px}
+#svgFallback{min-height:90px;font-size:11px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:8px 14px;border-radius:6px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+.mx{margin-top:14px}
+.mx-controls{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(170px,100%),1fr));gap:10px 12px}
+.mx-checks{grid-template-columns:repeat(auto-fill,minmax(min(160px,100%),1fr));margin-top:12px}
+.mx-colors{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.mx-colors label{display:inline-flex;align-items:center;gap:6px;margin:0;color:var(--ink);font-family:var(--mono);font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:2px 10px 2px 3px;cursor:pointer}
+.mx-colors input[type=color]{width:22px;height:22px;padding:0;border:1px solid var(--line);border-radius:50%;overflow:hidden}
+.mx-colors input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.mx-colors input[type=color]::-webkit-color-swatch{border:none;border-radius:50%}
+#mxPaper{align-self:flex-start;max-width:100%}
+#mxSvgFallback{min-height:90px;font-size:11px}
+.example-tag{font-size:11px;color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:1px 6px;font-weight:500;letter-spacing:.02em}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+</style>
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<header class="top">
+  <h1>Histone PTM Map</h1>
+  <p>Bottom-up coverage figure: detected peptides underlined, modifications marked under each residue.</p>
+</header>
+
+<div class="app">
+  <aside class="side">
+    <section class="card stack" aria-labelledby="h-seq">
+      <h2 id="h-seq">Sequence <span class="count" id="seqCount"></span></h2>
+      <div class="row">
+        <div><label for="preset">Load a sequence</label>
+          <select id="preset">
+            <option value="">Custom…</option>
+            <option value="H3.1">Human H3.1</option>
+            <option value="H3.3">Human H3.3</option>
+            <option value="H4">Human H4</option>
+            <option value="H2A">Human H2A type 1</option>
+            <option value="H2B">Human H2B type 1-C</option>
+          </select></div>
+        <div style="flex:0 1 110px"><label for="start">First residue #</label><input id="start" type="number" step="1"></div>
+      </div>
+      <div><label for="title">Figure title</label><input id="title" type="text" placeholder="e.g. Histone H3.1"></div>
+      <div><label for="seq">Protein sequence (plain or FASTA)</label><textarea id="seq" spellcheck="false"></textarea>
+        <p class="help">Presets have the initiator Met removed, so H3 K4 is residue 4. If your sequence starts with M, set the first residue # to 0.</p></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-peps">
+      <h2 id="h-peps">Detected peptides <span><span class="example-tag" id="exTag">Example data</span> <button class="ghost" id="clearPeps" type="button">Clear</button></span></h2>
+      <textarea id="peps" spellcheck="false"></textarea>
+      <p class="help">One proteoform per line — each line gets its own underline, with its modifications drawn on that line. Put modifications in brackets after the residue: <code>TK[me3]QTAR</code>, <code>K[ac]STGGK[ac]APR</code>. Mass shifts work too: <code>K[+42.011]</code>. Use <code>@9</code> to fix the start position, or a range like <code>9-17</code>. Lines starting with # are ignored.</p>
+    </section>
+
+    <section class="card" aria-labelledby="h-sites">
+      <h2 id="h-sites">Extra modification sites</h2>
+      <textarea id="sites" spellcheck="false" placeholder="K4me3, K9ac, S10ph"></textarea>
+      <p class="help">Sites not tied to a peptide above, e.g. <code>K27me3, K36me2</code>. Use <code>Ntac</code> (or <code>Nt-ac</code>) for the protein N-terminus and <code>Ct…</code> for the C-terminus. Separate entries with commas; put marks found together in one entry, separated by spaces, for a combinatorial proteoform: <code>K8ac M54ox</code>. Clicking a residue in the figure edits this list.</p>
+    </section>
+
+    <section class="card stack" aria-labelledby="h-layout">
+      <h2 id="h-layout">Layout</h2>
+      <div class="row">
+        <div><label for="blockSize">Residues per block</label><input id="blockSize" type="number" min="1" max="20"></div>
+        <div><label for="blocksPerRow">Blocks per row</label><input id="blocksPerRow" type="number" min="1" max="30"></div>
+      </div>
+      <div class="row">
+        <div><label for="fontSize">Letter size <span id="fsVal"></span></label><input id="fontSize" type="range" min="12" max="30" step="1"></div>
+        <div><label for="fontFamily">Figure font</label>
+          <select id="fontFamily">
+            <option value="Arial, Helvetica, sans-serif">Arial</option>
+            <option value="Helvetica, Arial, sans-serif">Helvetica</option>
+            <option value="'Courier New', Courier, monospace">Courier New</option>
+            <option value="'Times New Roman', Times, serif">Times New Roman</option>
+            <option value="Calibri, Carlito, Arial, sans-serif">Calibri</option>
+          </select></div>
+      </div>
+      <div><label for="iconSize">Modification icon size <span id="isVal"></span></label><input id="iconSize" type="range" min="10" max="40" step="1"></div>
+      <div class="row">
+        <div><label for="pepColorMode">Underline colour</label>
+          <select id="pepColorMode"><option value="single">One colour</option><option value="each">Colour each peptide</option></select></div>
+        <div><label for="lineColor">Line colour</label><input id="lineColor" type="color"></div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="dim"> Grey out undetected</label>
+        <label><input type="checkbox" id="merge"> Merge exact duplicates</label>
+        <label><input type="checkbox" id="showNumbers"> Residue numbers</label>
+        <label><input type="checkbox" id="showCoverage"> Coverage line</label>
+        <label><input type="checkbox" id="showLegend"> Legend</label>
+        <label><input type="checkbox" id="boldCovered"> Bold detected</label>
+      </div>
+    </section>
+  </aside>
+
+  <main class="main">
+    <div class="bar" id="stats"></div>
+    <div class="warnings" id="warnings" hidden></div>
+    <div class="paper-wrap" id="paperWrap">
+      <div class="paper" id="paper"></div>
+      <div class="pop" id="pop" hidden role="dialog" aria-label="Modifications for residue"></div>
+    </div>
+    <div class="bar">
+      <div class="export">
+        <button class="primary" id="copySvg" type="button">Copy SVG</button>
+        <span class="sep"></span>
+        <label for="pngScale" style="margin:0">PNG size</label>
+        <select id="pngScale" style="width:auto"><option value="2">2×</option><option value="3" selected>3× (~300 dpi)</option><option value="4">4×</option><option value="6">6×</option></select>
+        <button id="makePng" type="button">Make PNG</button>
+        <button id="copyPng" type="button">Copy PNG</button>
+        <button id="dlSvg" type="button" hidden>Download SVG</button>
+        <button id="dlPng" type="button" hidden>Download PNG</button>
+      </div>
+      <span class="hint">Drag across residues to add a peptide · click a residue to add a modification</span>
+    </div>
+    <div class="png-out" id="pngOut" hidden>
+      <p>Right-click the image and choose <b>Save image as…</b> or <b>Copy image</b>.</p>
+      <img id="pngImg" alt="Exported histone coverage figure">
+    </div>
+    <div class="png-out" id="svgOut" hidden>
+      <p>Copying was blocked here. The SVG markup is selected below — press Ctrl+C / ⌘C, then paste into Illustrator, Inkscape, PowerPoint, or save as a .svg file.</p>
+      <textarea id="svgFallback" readonly></textarea>
+    </div>
+
+    <section class="card mx" aria-labelledby="h-mx">
+      <h2 id="h-mx">Proteoform matrix <span class="count" id="mxCount"></span></h2>
+      <p class="help" style="margin:0 0 12px">One row per line in Detected peptides, plus one row per extra modification site; one column per modified site. Black dots are sites detected unmodified; coloured dots show the mark carried by that proteoform. Write N-terminal marks before the first residue: <code>[ac]-S[ph]GRGK…</code></p>
+      <div class="mx-controls">
+        <div><label for="mxLabel">Protein label</label><input id="mxLabel" type="text" placeholder="e.g. H2A"></div>
+        <div><label for="mxCols">Columns (blank = all modified sites)</label><input id="mxCols" type="text" placeholder="S1 K5 K8 K10 K14 R16 M54"></div>
+        <div><label for="mxOrder">Row order</label><select id="mxOrder"><option value="typed">As typed</option><option value="position">By position</option></select></div>
+        <div><label for="mxNumEvery">Number rows every</label><input id="mxNumEvery" type="number" min="1" max="100"></div>
+        <div><label for="mxDot">Dot size <span id="mxDotVal"></span></label><input id="mxDot" type="range" min="5" max="24" step="1"></div>
+        <div><label for="mxColW">Column spacing <span id="mxColWVal"></span></label><input id="mxColW" type="range" min="14" max="80" step="1"></div>
+      </div>
+      <div class="checks mx-checks">
+        <label><input type="checkbox" id="mxN"> N-terminus column</label>
+        <label><input type="checkbox" id="mxC"> C-terminus column</label>
+        <label><input type="checkbox" id="mxHeader"> Schematic header</label>
+        <label><input type="checkbox" id="mxLegend"> Legend</label>
+        <label><input type="checkbox" id="mxSiteRows"> Extra sites as rows</label>
+        <label><input type="checkbox" id="mxHideEmpty"> Hide rows without sites</label>
+        <label><input type="checkbox" id="mxComplete"> Complete lines (N to C)</label>
+      </div>
+      <div class="mx-colors" id="mxColors"></div>
+    </section>
+    <div class="warnings" id="mxWarnings" hidden></div>
+    <div class="paper" id="mxPaper"></div>
+    <div class="bar">
+      <div class="export">
+        <button class="primary" id="mxCopySvg" type="button">Copy SVG</button>
+        <span class="sep"></span>
+        <button id="mxMakePng" type="button">Make PNG</button>
+        <button id="mxCopyPng" type="button">Copy PNG</button>
+        <button id="mxDlSvg" type="button" hidden>Download SVG</button>
+        <button id="mxDlPng" type="button" hidden>Download PNG</button>
+      </div>
+      <span class="hint">PNG size uses the setting above</span>
+    </div>
+    <div class="png-out" id="mxPngOut" hidden>
+      <p>Right-click the image and choose <b>Save image as…</b> or <b>Copy image</b>.</p>
+      <img id="mxPngImg" alt="Exported proteoform matrix">
+    </div>
+    <div class="png-out" id="mxSvgOut" hidden>
+      <p>Copying was blocked here. The SVG markup is selected below — press Ctrl+C / ⌘C.</p>
+      <textarea id="mxSvgFallback" readonly></textarea>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- reference data ---------- */
+const PRESETS = {
+  "H3.1": {title:"Histone H3.1", seq:"ARTKQTARKSTGGKAPRKQLATKAARKSAPATGGVKKPHRYRPGTVALREIRRYQKSTELLIRKLPFQRLVREIAQDFKTDLRFQSSAVMALQEACEAYLVGLFEDTNLCAIHAKRVTIMPKDIQLARRIRGERA"},
+  "H3.3": {title:"Histone H3.3", seq:"ARTKQTARKSTGGKAPRKQLATKAARKSAPSTGGVKKPHRYRPGTVALREIRRYQKSTELLIRKLPFQRLVREIAQDFKTDLRFQSAAIGALQEASEAYLVGLFEDTNLCAIHAKRVTIMPKDIQLARRIRGERA"},
+  "H4":   {title:"Histone H4", seq:"SGRGKGGKGLGKGGAKRHRKVLRDNIQGITKPAIRRLARRGGVKRISGLIYEETRGVLKVFLENVIRDAVTYTEHAKRKTVTAMDVVYALKRQGRTLYGFGG"},
+  "H2A":  {title:"Histone H2A type 1", seq:"SGRGKQGGKARAKAKTRSSRAGLQFPVGRVHRLLRKGNYAERVGAGAPVYLAAVLEYLTAEILELAGNAARDNKKTRIIPRHLQLAIRNDEELNKLLGKVTIAQGGVLPNIQAVLLPKKTESHHKAKGK"},
+  "H2B":  {title:"Histone H2B type 1-C", seq:"PEPAKSAPAPKKGSKKAVTKAQKKDGKKRKRSRKESYSVYVYKVLKQVHPDTGISSKAMGIMNSFVNDIFERIAGEASRLAHYNKRSTITSREIQTAVRLLLPGELAKHAVSEGTKAVTKYTSSK"}
+};
+
+const EXAMPLE_PEPS = [
+  "# H3 peptides (propionylated, Arg-C-like cleavage)",
+  "TKQTAR",
+  "TK[me1]QTAR",
+  "TK[me3]QTAR",
+  "K[me3]S[ph]TGGKAPR",
+  "K[ac]STGGK[ac]APR",
+  "KQLATK[ac]AAR",
+  "K[ac]QLATKAAR",
+  "K[me3]SAPATGGVK[me2]KPHR",
+  "KSAPATGGVKKPHR",
+  "YRPGTVALR",
+  "YQK[ac]STELLIR",
+  "EIAQDFK[me2]TDLR",
+  "VTIMPKDIQLAR"
+].join("\n");
+
+// shape, fill, glyph colour, glyph, monoisotopic mass shift
+const MODS = {
+  me1:{label:"me1",name:"Monomethylation", shape:"square",  fill:"#df8a1f",stroke:"#c25e0c",text:"#111111",glyph:"me1",weight:400,mass:14.01565},
+  me2:{label:"me2",name:"Dimethylation",   shape:"square",  fill:"#4a94c9",stroke:"#1d65a6",text:"#111111",glyph:"me2",weight:400,mass:28.03130},
+  me3:{label:"me3",name:"Trimethylation",  shape:"square",  fill:"#428f38",stroke:"#1b5a14",text:"#111111",glyph:"me3",weight:400,mass:42.04695},
+  ac: {label:"ac", name:"Acetylation",     shape:"pentagon",fill:"#ec8a5f",stroke:"#dc4a22",text:"#111111",glyph:"ac", weight:400,mass:42.01057},
+  ph: {label:"ph", name:"Phosphorylation", shape:"circle",  fill:"#b9478b",stroke:"#8c1a55",text:"#111111",glyph:"ph", weight:400,mass:79.96633},
+  ub: {label:"ub", name:"Ubiquitination (GG)",shape:"hexagon",fill:"#7a4bb5",text:"#ffffff",glyph:"ub",mass:114.04293},
+  cr: {label:"cr", name:"Crotonylation",   shape:"square",  fill:"#cf4677",text:"#ffffff",glyph:"cr",mass:68.02621},
+  pr: {label:"pr", name:"Propionylation",  shape:"square",  fill:"#848a96",text:"#ffffff",glyph:"pr",mass:56.02621},
+  bu: {label:"bu", name:"Butyrylation",    shape:"square",  fill:"#a8781f",text:"#ffffff",glyph:"bu",mass:70.04186},
+  su: {label:"su", name:"Succinylation",   shape:"square",  fill:"#a3392a",text:"#ffffff",glyph:"su",mass:100.01604},
+  la: {label:"la", name:"Lactylation",     shape:"square",  fill:"#1f8a8a",text:"#ffffff",glyph:"la",mass:72.02113},
+  hib:{label:"hib",name:"2-Hydroxyisobutyrylation",shape:"square",fill:"#5b6b1f",text:"#ffffff",glyph:"hib",mass:86.03678},
+  cit:{label:"cit",name:"Citrullination",  shape:"triangle",fill:"#b8336a",text:"#ffffff",glyph:"ci",mass:0.98402},
+  ox: {label:"O",  name:"Oxidation",       shape:"circle",  fill:"#c94a4d",stroke:"#6e1c1f",text:"#ffffff",glyph:"O",  weight:400,mass:15.99491}
+};
+const MOD_ORDER = Object.keys(MODS);
+const ALIAS = {me:"me1",me1:"me1",methyl:"me1",monomethyl:"me1",methylation:"me1",me2:"me2",dimethyl:"me2",me3:"me3",trimethyl:"me3",
+  ac:"ac",acetyl:"ac",acetylation:"ac",ph:"ph",p:"ph",phos:"ph",phospho:"ph",phosphorylation:"ph",
+  ub:"ub",gg:"ub",ubi:"ub",ubiquitin:"ub",ubiquityl:"ub",ubiquitination:"ub",
+  cr:"cr",crot:"cr",crotonyl:"cr",pr:"pr",prop:"pr",propionyl:"pr",bu:"bu",but:"bu",butyryl:"bu",
+  su:"su",succ:"su",succinyl:"su",la:"la",lac:"la",lactyl:"la",kla:"la",hib:"hib",
+  cit:"cit",ci:"cit",citrulline:"cit",citrullination:"cit",deim:"cit",o:"ox",ox:"ox",oxidation:"ox",oxidized:"ox"};
+const CUSTOM_FILLS = ["#6d5dd3","#c2582b","#2b7bb9","#8f3f97","#3a8f6f","#b08a1e","#595f6e"];
+const CUSTOM = {};
+const PEP_PAL = ["#2b59c3","#d1495b","#00798c","#c98a1b","#4f9a62","#8e5572","#3d405b","#e07a5f"];
+
+function modDef(key){ return MODS[key] || CUSTOM[key]; }
+function resolveMod(tok){
+  const t = tok.trim(); if(!t) return null;
+  const lk = t.toLowerCase();
+  if(ALIAS[lk]) return ALIAS[lk];
+  if(/^[+-]?\d+(\.\d+)?$/.test(t)){
+    const v = parseFloat(t); let best=null, bd=1;
+    for(const k of MOD_ORDER){ const d=Math.abs(MODS[k].mass - v); if(d<bd){bd=d;best=k;} }
+    if(best && bd<=0.015) return best;
+  }
+  const key = "x:"+t;
+  if(!CUSTOM[key]){
+    let h=0; for(const c of t) h=(h*31+c.charCodeAt(0))>>>0;
+    CUSTOM[key] = {label:t,name:t,shape:"circle",fill:CUSTOM_FILLS[h%CUSTOM_FILLS.length],text:"#ffffff",glyph:t.replace(/^\+/,"").slice(0,3)};
+  }
+  return key;
+}
+function modRank(key){ const i=MOD_ORDER.indexOf(key); return i<0 ? 100 : i; }
+
+/* ---------- state ---------- */
+const DEFAULTS = {
+  preset:"H3.1", title:PRESETS["H3.1"].title, seq:PRESETS["H3.1"].seq, start:1,
+  peps:EXAMPLE_PEPS, sites:"K27me3, K36me3", example:true,
+  blockSize:5, blocksPerRow:10, fontSize:18, iconSize:22, fontFamily:"Arial, Helvetica, sans-serif",
+  pepColorMode:"single", lineColor:"#1c2b4a", dim:true, merge:true, showNumbers:true, showCoverage:true, showLegend:true, boldCovered:false,
+  mxLabel:"", mxCols:"", mxOrder:"typed", mxNumEvery:10, mxDot:10, mxColW:30, mxN:true, mxC:true, mxHeader:true, mxLegend:true, mxSiteRows:true, mxHideEmpty:true, mxComplete:true, mxColors:{}
+};
+const KEY = "histone-ptm-map-v1";
+let state = Object.assign({}, DEFAULTS);
+try{ const s = JSON.parse(localStorage.getItem(KEY)||"null"); if(s) state = Object.assign(state, s); }catch(e){}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+
+const $ = id => document.getElementById(id);
+const FIELDS = ["preset","title","seq","start","peps","sites","blockSize","blocksPerRow","fontSize","iconSize","mxLabel","mxCols","mxOrder","mxNumEvery","mxDot","mxColW","fontFamily","pepColorMode","lineColor"];
+const CHECKS = ["dim","merge","showNumbers","showCoverage","showLegend","boldCovered","mxN","mxC","mxHeader","mxLegend","mxSiteRows","mxHideEmpty","mxComplete"];
+function syncInputs(){
+  FIELDS.forEach(f=>{ $(f).value = state[f]; });
+  CHECKS.forEach(f=>{ $(f).checked = !!state[f]; });
+  $("fsVal").textContent = state.fontSize+" px";
+  $("isVal").textContent = state.iconSize+" px";
+  $("mxDotVal").textContent = state.mxDot+" px"; $("mxColWVal").textContent = state.mxColW+" px";
+  $("exTag").hidden = !state.example;
+}
+
+/* ---------- parsing ---------- */
+function cleanSeq(s){
+  return s.split(/\r?\n/).filter(l=>!l.trim().startsWith(">")).join("").toUpperCase().replace(/[^A-Z]/g,"");
+}
+function parsePep(line){
+  let body = line, at = null;
+  const am = body.match(/@\s*(-?\d+)/); if(am){ at=+am[1]; body=body.replace(am[0]," "); }
+  body = body.trim();
+  const rm = body.match(/^(-?\d+)\s*[-–]\s*(-?\d+)$/);
+  if(rm) return {range:[+rm[1],+rm[2]]};
+  const fl = body.match(/^[A-Za-z-]\.(.+)\.[A-Za-z-]$/); if(fl) body = fl[1];
+  let seq="", mods=[], m;
+  // "-[am]" at the very end = C-terminal modification
+  let cMods = [];
+  const cm = body.match(/-\s*[\[\(\{]([^\]\)\}]*)[\]\)\}]\s*$/);
+  if(cm){ cMods = cm[1].split(/[,;]/); body = body.slice(0, cm.index); }
+  const re = /([A-Za-z])|[\[\(\{]([^\]\)\}]*)[\]\)\}]/g;
+  while((m = re.exec(body))){
+    if(m[1]) seq += m[1].toUpperCase();
+    else {
+      // a bracket before the first residue ("[ac]-SGRG…") is an N-terminal modification
+      const term = seq.length ? undefined : "N", idx = Math.max(0, seq.length-1);
+      m[2].split(/[,;]/).forEach(t=>{ const k=resolveMod(t); if(k) mods.push({idx,key:k,term}); });
+    }
+  }
+  cMods.forEach(t=>{ const k=resolveMod(t); if(k) mods.push({idx:Math.max(0,seq.length-1),key:k,term:"C"}); });
+  if(!seq) return {error:"no residues found"};
+  return {seq, mods, at};
+}
+function parseSiteToken(tok){
+  const re = /^([A-Za-z])(\d+)([A-Za-z+][\w.+-]*)$/;
+  // left-most residue+number whose remainder isn't itself another residue+number (so "H3K4me3" -> K4 me3)
+  for(let i=0;i<tok.length;i++){
+    const m = tok.slice(i).match(re);
+    if(m && !/^[A-Za-z]\d/.test(m[3])) return {res:m[1].toUpperCase(), pos:+m[2], mod:m[3]};
+  }
+  return null;
+}
+function siteTokens(text){ return text.split(/[\s,;\/]+/).map(t=>t.trim()).filter(Boolean); }
+function siteEntries(text){ return text.split(/[,;\n]+/).map(t=>t.trim()).filter(Boolean); }
+function entryParts(entry){ return entry.split(/\s+|[\/&]|\+(?=[A-Za-z])/).map(t=>t.trim()).filter(Boolean); }
+
+function buildModel(){
+  const seq = cleanSeq(state.seq), n = seq.length, off = parseInt(state.start,10) || 0;
+  const warnings = [];
+  let peps = [];
+  state.peps.split(/\r?\n/).forEach((raw,li)=>{
+    const line = raw.trim(); if(!line || line.startsWith("#")) return;
+    const p = parsePep(line);
+    const tag = `Line ${li+1} (${line.length>24?line.slice(0,24)+"…":line})`;
+    if(p.error){ warnings.push(`${tag}: ${p.error}.`); return; }
+    if(p.range){
+      const s=p.range[0]-off, e=p.range[1]-off;
+      if(s<0||e>=n||s>e){ warnings.push(`${tag}: range is outside the sequence.`); return; }
+      peps.push({s,e,mods:[],li}); return;
+    }
+    let s;
+    if(p.at!==null){
+      s = p.at - off;
+      if(seq.substr(s,p.seq.length)!==p.seq){ warnings.push(`${tag}: doesn't match the sequence at position ${p.at}.`); return; }
+    } else {
+      s = seq.indexOf(p.seq);
+      if(s<0){ warnings.push(`${tag}: not found in the sequence.`); return; }
+      const s2 = seq.indexOf(p.seq, s+1);
+      if(s2>=0) warnings.push(`${tag}: occurs more than once; placed at ${s+off}. Add @${s2+off} to use the other position.`);
+    }
+    peps.push({s, e:s+p.seq.length-1, mods:p.mods.map(x=>({i:s+x.idx,key:x.key,term:x.term})), li});
+  });
+
+  // every proteoform (peptide + its PTM set) gets its own underline; only exact repeats collapse
+  if(state.merge){
+    const seen = new Set();
+    peps = peps.filter(p=>{
+      const k = p.s+"-"+p.e+"|"+p.mods.map(m=>m.i+":"+m.key+":"+(m.term||"")).sort().join(",");
+      if(seen.has(k)) return false; seen.add(k); return true;
+    });
+  }
+  peps.sort((a,b)=>a.s-b.s || b.e-a.e || a.li-b.li);
+  const laneEnd = [];
+  peps.forEach((p,idx)=>{
+    let l = laneEnd.findIndex(end=>end < p.s);
+    if(l<0){ l=laneEnd.length; laneEnd.push(p.e); } else laneEnd[l]=p.e;
+    p.lane=l; p.color = state.pepColorMode==="each" ? PEP_PAL[idx%PEP_PAL.length] : state.lineColor;
+  });
+
+  const resMods = Array.from({length:n},()=>new Map()); // key -> source ("pep"|"site")
+  peps.forEach(p=>p.mods.forEach(m=>{ if(m.i<n) resMods[m.i].set(m.key,"pep"); }));
+  // Extra sites: entries are separated by commas / semicolons / new lines.
+  // Parts inside one entry (space, "/", "&" or "+") are one combinatorial proteoform, e.g. "K8ac M54ox".
+  const siteList = [], siteGroups = [];
+  siteEntries(state.sites).forEach(entry=>{
+    const parts = entryParts(entry), group = [];
+    parts.forEach(tok=>{
+      // protein termini: Ntac / Nt-ac (N-terminus), Ctam / Ct-am (C-terminus)
+      const tm = tok.match(/^([NC])t[-:_.]?(.+)$/i);
+      if(tm){
+        if(!n) return;
+        const term = tm[1].toUpperCase();
+        group.push({i: term==="N" ? 0 : n-1, key:resolveMod(tm[2]), tok, term});
+        return;
+      }
+      const t = parseSiteToken(tok);
+      if(!t){ warnings.push(`Site "${tok}": write it like K9ac, S10ph or Ntac.`); return; }
+      const i = t.pos - off;
+      if(i<0||i>=n){ warnings.push(`Site "${tok}": position ${t.pos} is outside the sequence.`); return; }
+      if(seq[i]!==t.res){ warnings.push(`Site "${tok}": residue ${t.pos} is ${seq[i]}, not ${t.res}.`); return; }
+      group.push({i, key:resolveMod(t.mod), tok});
+    });
+    if(!group.length) return;
+    const combo = parts.length > 1;
+    group.forEach(g=>{
+      siteList.push(Object.assign({combo}, g));
+      if(!resMods[g.i].has(g.key)) resMods[g.i].set(g.key, combo ? "combo" : "site");
+    });
+    siteGroups.push(group);
+  });
+
+  const covered = new Array(n).fill(false);
+  peps.forEach(p=>{ for(let i=p.s;i<=p.e;i++) covered[i]=true; });
+  const nCov = covered.filter(Boolean).length;
+  const used = new Set(); resMods.forEach(m=>m.forEach((_,k)=>used.add(k)));
+  const modSites = resMods.filter(m=>m.size).length;
+  return {seq,n,off,peps,resMods,covered,nCov,used:[...used].sort((a,b)=>modRank(a)-modRank(b)),modSites,warnings,siteList,siteGroups};
+}
+
+/* ---------- drawing ---------- */
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function f1(x){ return Math.round(x*100)/100; }
+
+function iconSVG(key, cx, cy, size, font){
+  const d = modDef(key); if(!d) return "";
+  const r = size/2, st = d.stroke || "rgba(0,0,0,.28)", sw = d.stroke ? Math.max(1, size*0.075) : 0.6;
+  let shape;
+  switch(d.shape){
+    case "square": shape = `<rect x="${f1(cx-r)}" y="${f1(cy-r)}" width="${f1(size)}" height="${f1(size)}" rx="${f1(size*0.06)}"`; break;
+    case "pentagon": { const pts=[], q=r*1.1, dy=r*0.1; for(let k=0;k<5;k++){ const a=-Math.PI/2+2*Math.PI/5*k; pts.push(f1(cx+q*Math.cos(a))+","+f1(cy+dy+q*Math.sin(a))); } shape=`<polygon stroke-linejoin="round" points="${pts.join(" ")}"`; break; }
+    case "diamond": { const q=r*1.12; shape = `<polygon points="${f1(cx)},${f1(cy-q)} ${f1(cx+q)},${f1(cy)} ${f1(cx)},${f1(cy+q)} ${f1(cx-q)},${f1(cy)}"`; break; }
+    case "hexagon": { const pts=[]; for(let k=0;k<6;k++){ const a=Math.PI/3*k; pts.push(f1(cx+r*1.05*Math.cos(a))+","+f1(cy+r*1.05*Math.sin(a))); } shape=`<polygon points="${pts.join(" ")}"`; break; }
+    case "triangle": shape = `<polygon points="${f1(cx)},${f1(cy-r*1.1)} ${f1(cx+r*1.1)},${f1(cy+r*0.85)} ${f1(cx-r*1.1)},${f1(cy+r*0.85)}"`; break;
+    default: shape = `<circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(r)}"`;
+  }
+  const gl = d.glyph || "", gs = size*(gl.length<=1?0.62:gl.length===2?0.5:0.42);
+  const gy = cy + gs*0.36 + (d.shape==="triangle"? r*0.2 : d.shape==="pentagon"? r*0.12 : 0);
+  return `${shape} fill="${d.fill}" stroke="${st}" stroke-width="${f1(sw)}"/>` +
+    (gl ? `<text x="${f1(cx)}" y="${f1(gy)}" font-size="${f1(gs)}" font-weight="${d.weight||700}" text-anchor="middle" fill="${d.text}" font-family="${esc(font)}">${esc(gl)}</text>` : "");
+}
+
+function renderSVG(M, interactive){
+  const fs = +state.fontSize, font = state.fontFamily;
+  const bs = Math.max(1, parseInt(state.blockSize,10)||5), bpr = Math.max(1, parseInt(state.blocksPerRow,10)||10);
+  const is = Math.max(8, +state.iconSize||22);
+  const perRow = bs*bpr, cw = Math.max(fs*0.82, is*1.08), bg = Math.max(fs*0.82, cw*0.6);
+  const digits = String(M.off + Math.max(M.n,1)).length;
+  const numW = state.showNumbers ? fs*0.58*digits + fs*0.9 : 0;
+  const padX = fs*1.1, lp = Math.max(3.6, fs*0.25), sw = Math.max(1.6, fs*0.13);
+  const ip = is + Math.max(3, is*0.14);
+  const colX = c => padX + numW + c*cw + Math.floor(c/bs)*bg;
+  const W = Math.ceil(colX(perRow-1) + cw + padX);
+  const ink = "#15181f", muted = "#7b818d", dimC = "#b9bdc6";
+  const out = [], hits = [];
+  let y = fs*0.9;
+
+  const title = state.title.trim();
+  if(title){ out.push(`<text x="${f1(padX)}" y="${f1(y+fs*1.05)}" font-size="${f1(fs*1.2)}" font-weight="700" fill="${ink}">${esc(title)}</text>`); y += fs*1.75; }
+  if(state.showCoverage && M.n){
+    const pct = (100*M.nCov/M.n).toFixed(1);
+    out.push(`<text x="${f1(padX)}" y="${f1(y+fs*0.8)}" font-size="${f1(fs*0.72)}" fill="${muted}">Sequence coverage ${pct}% (${M.nCov}/${M.n} residues) · ${M.peps.length} proteoform${M.peps.length===1?"":"s"} · ${M.modSites} modified site${M.modSites===1?"":"s"}</text>`);
+    y += fs*1.45;
+  }
+  if(title || state.showCoverage) y += fs*0.35;
+
+  const rows = Math.ceil(M.n/perRow);
+  for(let r=0;r<rows;r++){
+    const rs = r*perRow, re = Math.min(M.n, rs+perRow)-1;
+    const rowPeps = M.peps.filter(p=>p.s<=re && p.e>=rs);
+    const L = rowPeps.length ? Math.max(...rowPeps.map(p=>p.lane))+1 : 0;
+    const siteKeys = i => [...M.resMods[i]].filter(([,src])=>src==="site").map(([k])=>k).sort((a,b)=>modRank(a)-modRank(b));
+    let Mx = 0; for(let i=rs;i<=re;i++) Mx = Math.max(Mx, siteKeys(i).length);
+    const modLanes = rowPeps.some(p=>p.mods.some(m=>m.i>=rs&&m.i<=re));
+    const pitch = modLanes ? ip : lp, laneMid = modLanes ? is/2 : sw/2;
+    const rowTop = y, base = y + fs;
+    if(state.showNumbers) out.push(`<text x="${f1(padX+numW-fs*0.55)}" y="${f1(base)}" font-size="${f1(fs*0.7)}" text-anchor="end" fill="${muted}">${rs+M.off}</text>`);
+    for(let i=rs;i<=re;i++){
+      const c=i-rs, cov=M.covered[i];
+      const fill = (!cov && state.dim && M.peps.length) ? dimC : ink;
+      const wt = (cov && state.boldCovered) ? ` font-weight="700"` : "";
+      out.push(`<text x="${f1(colX(c)+cw/2)}" y="${f1(base)}" font-size="${fs}" text-anchor="middle" fill="${fill}"${wt}>${M.seq[i]}</text>`);
+    }
+    const u0 = base + fs*0.34;
+    rowPeps.forEach(p=>{
+      const a=Math.max(p.s,rs), b=Math.min(p.e,re);
+      const x1 = colX(a-rs) + (a===p.s ? 1.5 : -bg*0.2), x2 = colX(b-rs) + cw - (b===p.e ? 1.5 : -bg*0.2);
+      const ly = u0 + p.lane*pitch + laneMid;
+      out.push(`<line x1="${f1(x1)}" y1="${f1(ly)}" x2="${f1(x2)}" y2="${f1(ly)}" stroke="${p.color}" stroke-width="${f1(sw)}"/>`);
+      const byRes = new Map();
+      p.mods.filter(m=>m.i>=rs&&m.i<=re).forEach(m=>{ if(!byRes.has(m.i)) byRes.set(m.i,[]); byRes.get(m.i).push(m); });
+      byRes.forEach((ms,i)=>{
+        ms.sort((a,b)=>(a.term==="N"?-1:0)-(b.term==="N"?-1:0) || modRank(a.key)-modRank(b.key));
+        ms.forEach((m,j)=>out.push(iconSVG(m.key, colX(i-rs)+cw/2 + (j-(ms.length-1)/2)*is*0.8, ly, is, font)));
+      });
+    });
+    const i0 = u0 + L*pitch + (L ? fs*0.25 : fs*0.05);
+    for(let i=rs;i<=re;i++){
+      siteKeys(i).forEach((k,j)=>out.push(iconSVG(k, colX(i-rs)+cw/2, i0 + j*ip + is/2, is, font)));
+    }
+    const bottom = Math.max(u0 + L*pitch, i0 + Mx*ip);
+    if(interactive){
+      for(let i=rs;i<=re;i++){
+        const c=i-rs, keys=[...M.resMods[i].keys()].map(k=>modDef(k).label);
+        const pp = M.peps.filter(p=>p.s<=i&&p.e>=i).map(p=>`${p.s+M.off}–${p.e+M.off}`);
+        const tip = `${M.seq[i]}${i+M.off}` + (keys.length?` · ${keys.join(", ")}`:"") + (pp.length?` · peptide ${pp.join(", ")}`:" · not detected");
+        hits.push(`<rect class="hit" data-i="${i}" x="${f1(colX(c)-bg*0.1)}" y="${f1(rowTop)}" width="${f1(cw+bg*0.2)}" height="${f1(bottom-rowTop+fs*0.2)}" rx="3"><title>${esc(tip)}</title></rect>`);
+      }
+    }
+    y = bottom + fs*0.95;
+  }
+
+  if(state.showLegend && (M.peps.length || M.used.length)){
+    y += fs*0.2;
+    out.push(`<line x1="${f1(padX)}" y1="${f1(y)}" x2="${f1(W-padX)}" y2="${f1(y)}" stroke="#e1e3e8" stroke-width="1"/>`);
+    y += fs*0.9;
+    const lf = fs*0.7, lis = Math.round(lf*1.25), rowH = lis + fs*0.55;
+    let x = padX; const cy = () => y + lis/2;
+    const place = w => { if(x + w > W - padX && x > padX){ x = padX; y += rowH; } };
+    if(M.peps.length){
+      const w = fs*1.6 + lf*0.55*19;
+      place(w);
+      out.push(`<line x1="${f1(x)}" y1="${f1(cy())}" x2="${f1(x+fs*1.3)}" y2="${f1(cy())}" stroke="${state.pepColorMode==="each"?PEP_PAL[0]:state.lineColor}" stroke-width="${f1(sw)}"/>`);
+      out.push(`<text x="${f1(x+fs*1.6)}" y="${f1(cy()+lf*0.35)}" font-size="${f1(lf)}" fill="${ink}">Detected proteoform</text>`);
+      x += w + fs*0.9;
+    }
+    M.used.forEach(k=>{
+      const d = modDef(k), txt = MODS[k] ? `${d.label} · ${d.name.toLowerCase()}` : d.label;
+      const w = lis + fs*0.4 + lf*0.55*txt.length;
+      place(w);
+      out.push(iconSVG(k, x+lis/2, cy(), lis, font));
+      out.push(`<text x="${f1(x+lis+fs*0.4)}" y="${f1(cy()+lf*0.35)}" font-size="${f1(lf)}" fill="${ink}">${esc(txt)}</text>`);
+      x += w + fs*0.9;
+    });
+    y += rowH;
+  }
+  const H = Math.ceil(y + fs*0.4);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${esc(font)}">` +
+    `<rect width="${W}" height="${H}" fill="#ffffff"/>` + out.join("") + hits.join("") + `</svg>`;
+}
+
+/* ---------- proteoform matrix ---------- */
+const MX_DEFAULT = {ac:"#f28c28", ph:"#b9478b", me1:"#f3e03b", me2:"#6cbf45", me3:"#2d7a31", ox:"#d23c3c"};
+function mxColor(k){ return (state.mxColors||{})[k] || MX_DEFAULT[k] || modDef(k).fill; }
+function mxProteinLabel(){
+  if(state.mxLabel.trim()) return state.mxLabel.trim();
+  const m = state.title.match(/\bH(?:2A|2B|1|3|4)(?:\.\w+)?/i);
+  return m ? m[0] : state.title.trim();
+}
+function buildMatrix(M){
+  const warn = [];
+  // extra modification sites: each becomes a single-site row (after the peptide rows) and always gets a column
+  const siteRows = M.siteGroups.map((g,k)=>({s:Math.min(...g.map(x=>x.i)), e:Math.max(...g.map(x=>x.i)),
+    mods:g.map(x=>({i:x.i,key:x.key,term:x.term})), li:1e6+k, site:true}));
+  let rows = M.peps.concat(state.mxSiteRows ? siteRows : [])
+    .sort(state.mxOrder==="position" ? (a,b)=>a.s-b.s||b.e-a.e||a.li-b.li : (a,b)=>a.li-b.li);
+  let sites = [];
+  if(state.mxCols.trim()){
+    siteTokens(state.mxCols).forEach(t=>{
+      const m = t.match(/^([A-Za-z])?(\d+)$/);
+      if(!m){ warn.push(`Column "${t}": write it like K9 or 9.`); return; }
+      const i = +m[2] - M.off;
+      if(i<0||i>=M.n){ warn.push(`Column "${t}": outside the sequence.`); return; }
+      if(m[1] && m[1].toUpperCase()!==M.seq[i]){ warn.push(`Column "${t}": residue ${m[2]} is ${M.seq[i]}.`); return; }
+      if(!sites.includes(i)) sites.push(i);
+    });
+    sites.sort((a,b)=>a-b);
+  } else {
+    const set = new Set(); rows.concat(siteRows).forEach(p=>p.mods.forEach(m=>{ if(!m.term) set.add(m.i); }));
+    sites = [...set].sort((a,b)=>a-b);
+  }
+  const cols = [];
+  if(state.mxN) cols.push({t:"N", label:"N"});
+  sites.forEach(i=>cols.push({t:"R", i, label:M.seq[i]+(i+M.off)}));
+  if(state.mxC) cols.push({t:"C", label:"C"});
+  // null = site not in this peptide; [] = detected unmodified; [keys] = modified
+  const cell = (p,c)=>{
+    const ks = arr => arr.map(m=>m.key).sort((a,b)=>modRank(a)-modRank(b));
+    if(p.site){ // extra-site rows show only their own marks
+      const hit = p.mods.filter(m=> m.term ? c.t===m.term : (c.t==="R" && c.i===m.i));
+      return hit.length ? ks(hit) : null;
+    }
+    if(c.t==="N") return p.s===0 ? ks(p.mods.filter(m=>m.term==="N")) : null;
+    if(c.t==="C") return p.e===M.n-1 ? ks(p.mods.filter(m=>m.term==="C")) : null;
+    return (p.s<=c.i && c.i<=p.e) ? ks(p.mods.filter(m=>!m.term && m.i===c.i)) : null;
+  };
+  // drop proteoforms that don't reach any column (they'd be blank rows)
+  const hidden = state.mxHideEmpty ? rows.filter(p=>!cols.some(c=>cell(p,c))).length : 0;
+  if(hidden) rows = rows.filter(p=>cols.some(c=>cell(p,c)));
+  // extra sites that were rejected (wrong residue, bad format) are reported here too
+  M.warnings.filter(x=>x.startsWith("Site ")).forEach(x=>warn.push(x.replace(/^Site /,"Extra site ")));
+  // header icons and legend include extra sites even when they aren't shown as rows
+  const colKeys = c => { const ks = new Set(); rows.concat(state.mxSiteRows ? [] : siteRows).forEach(p=>(cell(p,c)||[]).forEach(k=>ks.add(k))); return [...ks].sort((a,b)=>modRank(a)-modRank(b)); };
+  const used = new Set(); cols.forEach(c=>colKeys(c).forEach(k=>used.add(k)));
+  return {rows, cols, cell, colKeys, warn, hidden, used:[...used].sort((a,b)=>modRank(a)-modRank(b))};
+}
+function renderMatrix(M, X){
+  const d = +state.mxDot||10, r = d/2, colW = Math.max(+state.mxColW||30, d*1.4), rowP = d*1.3, font = state.fontFamily;
+  const lf = Math.max(9, d*1.1), ink = "#15181f";
+  const every = Math.max(1, parseInt(state.mxNumEvery,10)||10);
+  const numW = lf*0.62*String(Math.max(1,X.rows.length)).length + lf*0.9;
+  const padX = lf*1.2, x0 = padX + numW, nC = X.cols.length;
+  // the protein ball sits between the last site and C; widen that gap so it clears the icons
+  const ballR = Math.min(Math.max(d*1.5, lf*1.3), Math.max(colW*0.62, d*2));
+  const cGap = (state.mxHeader && nC>=2 && X.cols[nC-1].t==="C") ? ballR*2 + d*0.6 : 0;
+  const colX = j => x0 + j*colW + colW/2 + (X.cols[j] && X.cols[j].t==="C" ? cGap : 0);
+  let W = Math.ceil(x0 + Math.max(1,nC)*colW + cGap + padX);
+  const out = [];
+  let y = lf*0.8;
+  if(!nC || !X.rows.length){
+    out.push(`<text x="${f1(padX)}" y="${f1(y+lf)}" font-size="${f1(lf)}" fill="#7b818d">${!X.rows.length?"Add peptides above to build the matrix.":"No modified sites yet — add PTMs to your peptides or list columns."}</text>`);
+    W = Math.max(W, 420); y += lf*2;
+  } else {
+    if(state.mxHeader){
+      const is = Math.min(colW*0.92, Math.max(10, Math.round(d*1.6)));
+      X.cols.forEach((c,j)=>out.push(`<text x="${f1(colX(j))}" y="${f1(y+lf)}" font-size="${f1(lf)}" text-anchor="middle" fill="${ink}">${esc(c.label)}</text>`));
+      const lineY = y + lf*1.35 + is*0.55;
+      const hasC = X.cols[nC-1].t==="C";
+      let bx;
+      if(hasC && nC>=2) bx = colX(nC-2) + colW/2 + d*0.3 + ballR;
+      else { bx = colX(nC-1) + colW*0.5 + ballR; W = Math.max(W, Math.ceil(bx + ballR + padX)); }
+      const lx2 = Math.max(colX(nC-1), bx);
+      out.push(`<line x1="${f1(colX(0))}" y1="${f1(lineY)}" x2="${f1(lx2)}" y2="${f1(lineY)}" stroke="#8b86a8" stroke-width="${f1(Math.max(2,d*0.35))}" stroke-linecap="round"/>`);
+      let maxStack = 0;
+      X.cols.forEach((c,j)=>{
+        const arr = X.colKeys(c);
+        maxStack = Math.max(maxStack, arr.length);
+        arr.forEach((k,m)=>out.push(iconSVG(k, colX(j), lineY + m*(is*1.08), is, font)));
+      });
+      const bl = mxProteinLabel();
+      out.push(`<circle cx="${f1(bx)}" cy="${f1(lineY)}" r="${f1(ballR)}" fill="#dc5a78" stroke="#a52f4f" stroke-width="${f1(Math.max(1,ballR*0.08))}"/>`);
+      if(bl){ const bf = Math.min(ballR*0.75, ballR*2.6/Math.max(2,bl.length)); out.push(`<text x="${f1(bx)}" y="${f1(lineY+bf*0.36)}" font-size="${f1(bf)}" font-weight="700" text-anchor="middle" fill="#ffffff">${esc(bl)}</text>`); }
+      y = Math.max(lineY + ballR, lineY + (maxStack ? (maxStack-1)*is*1.08 + is/2 : 0)) + lf*1.1;
+    }
+    X.cols.forEach((c,j)=>out.push(`<text x="${f1(colX(j))}" y="${f1(y+lf)}" font-size="${f1(lf)}" font-weight="700" text-anchor="middle" fill="${ink}">${esc(c.label)}</text>`));
+    y += lf*1.5;
+    const sw = Math.max(1, d*0.16), dsw = Math.max(0.6, d*0.07);
+    X.rows.forEach((p,k)=>{
+      const cy = y + k*rowP + rowP/2;
+      if(k===0 || (k+1)%every===0) out.push(`<text x="${f1(x0 - lf*0.5)}" y="${f1(cy+lf*0.35)}" font-size="${f1(lf)}" font-weight="700" text-anchor="end" fill="${ink}">${k+1}</text>`);
+      // complete rows: every proteoform spans N→C with a dot in every column (uncovered sites drawn as unmodified)
+      const present = X.cols.map((c,j)=>({j, ks:X.cell(p,c) || (state.mxComplete ? [] : null)})).filter(o=>o.ks);
+      if(present.length>1) out.push(`<line x1="${f1(colX(present[0].j))}" y1="${f1(cy)}" x2="${f1(colX(present[present.length-1].j))}" y2="${f1(cy)}" stroke="${ink}" stroke-width="${f1(sw)}"/>`);
+      present.forEach(({j,ks})=>{
+        const cx = colX(j);
+        if(ks.length<=1){
+          out.push(`<circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(r)}" fill="${ks.length?mxColor(ks[0]):ink}" stroke="${ink}" stroke-width="${f1(dsw)}"/>`);
+        } else { // several marks on one site: split the dot into wedges
+          const n = ks.length;
+          ks.forEach((key,q)=>{
+            const a0 = -Math.PI/2 + q*2*Math.PI/n, a1 = a0 + 2*Math.PI/n;
+            out.push(`<path d="M${f1(cx)},${f1(cy)} L${f1(cx+r*Math.cos(a0))},${f1(cy+r*Math.sin(a0))} A${f1(r)},${f1(r)} 0 0 1 ${f1(cx+r*Math.cos(a1))},${f1(cy+r*Math.sin(a1))} Z" fill="${mxColor(key)}"/>`);
+          });
+          out.push(`<circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(r)}" fill="none" stroke="${ink}" stroke-width="${f1(dsw)}"/>`);
+        }
+      });
+    });
+    y += X.rows.length*rowP + lf*0.6;
+    if(state.mxLegend){
+      const items = [{c:ink, t:"Unmodified"}].concat(X.used.map(k=>({c:mxColor(k), t:MODS[k] ? modDef(k).name : modDef(k).label})));
+      const lf2 = lf*0.92, rowH = lf2*1.6;
+      let x = padX; y += lf*0.4;
+      items.forEach(it=>{
+        const w = d + lf2*0.5 + lf2*0.56*it.t.length;
+        if(x + w > W - padX && x > padX){ x = padX; y += rowH; }
+        out.push(`<circle cx="${f1(x+r)}" cy="${f1(y+rowH/2)}" r="${f1(r)}" fill="${it.c}" stroke="${ink}" stroke-width="${f1(dsw)}"/>`);
+        out.push(`<text x="${f1(x+d+lf2*0.45)}" y="${f1(y+rowH/2+lf2*0.35)}" font-size="${f1(lf2)}" fill="${ink}">${esc(it.t)}</text>`);
+        x += w + lf2*1.2;
+      });
+      y += rowH;
+    }
+  }
+  const H = Math.ceil(y + lf*0.6);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${esc(font)}">` +
+    `<rect width="${W}" height="${H}" fill="#ffffff"/>` + out.join("") + `</svg>`;
+}
+let mxX = null, mxColorKeys = null;
+function renderMx(){
+  mxX = buildMatrix(model);
+  $("mxPaper").innerHTML = renderMatrix(model, mxX);
+  const nSites = mxX.cols.filter(c=>c.t==="R").length;
+  $("mxCount").textContent = `${mxX.rows.length} rows × ${nSites} sites` + (mxX.hidden ? ` · ${mxX.hidden} without sites hidden` : "");
+  const w = $("mxWarnings");
+  if(mxX.warn.length){ w.hidden=false; w.innerHTML = `<b>Matrix inputs need attention</b><ul>${mxX.warn.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`; } else w.hidden = true;
+  const keys = mxX.used.join("|");
+  if(keys!==mxColorKeys){
+    mxColorKeys = keys;
+    $("mxColors").innerHTML = mxX.used.map(k=>`<label title="Dot colour for ${esc(modDef(k).name)}"><input type="color" id="mxc-${esc(k.replace(/[^\w-]/g,"_"))}" data-k="${esc(k)}" value="${mxColor(k)}">${esc(modDef(k).label)}</label>`).join("");
+    $("mxColors").querySelectorAll("input").forEach(inp=>inp.addEventListener("input", e=>{
+      state.mxColors = Object.assign({}, state.mxColors, {[e.target.dataset.k]: e.target.value});
+      $("mxPaper").innerHTML = renderMatrix(model, mxX); save();
+    }));
+  }
+  $("mxPngOut").hidden = true; $("mxSvgOut").hidden = true;
+}
+
+/* ---------- render ---------- */
+let model = null;
+function render(){
+  model = buildModel();
+  $("paper").innerHTML = renderSVG(model, true);
+  $("seqCount").textContent = model.n + " aa";
+  const pct = model.n ? (100*model.nCov/model.n).toFixed(1) : "0.0";
+  $("stats").innerHTML =
+    `<div class="stat"><b>${pct}%</b><span>coverage</span></div>` +
+    `<div class="stat"><b>${model.peps.length}</b><span>proteoforms</span></div>` +
+    `<div class="stat"><b>${model.modSites}</b><span>modified sites</span></div>` +
+    `<div class="stat"><b>${model.used.length}</b><span>mark types</span></div>`;
+  const w = $("warnings");
+  if(model.warnings.length){
+    w.hidden = false;
+    w.innerHTML = `<b>${model.warnings.length} line${model.warnings.length>1?"s":""} need attention</b><ul>${model.warnings.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;
+  } else w.hidden = true;
+  $("pngOut").hidden = true; $("svgOut").hidden = true;
+  renderMx();
+  save();
+}
+function exportSVG(){ return renderSVG(model || buildModel(), false); }
+
+/* ---------- inputs ---------- */
+FIELDS.forEach(f=>{
+  $(f).addEventListener("input", e=>{
+    const v = e.target.value;
+    if(f==="preset"){
+      if(PRESETS[v]){ state.seq = PRESETS[v].seq; state.title = PRESETS[v].title; state.start = 1; }
+      state.preset = v; syncInputs();
+    } else {
+      state[f] = (f==="fontSize"||f==="blockSize"||f==="blocksPerRow"||f==="start") ? v : v;
+      if(f==="seq"){ state.preset = ""; $("preset").value = ""; }
+      if(f==="peps"||f==="sites"){ state.example = false; $("exTag").hidden = true; }
+      if(f==="fontSize") $("fsVal").textContent = v+" px";
+      if(f==="iconSize") $("isVal").textContent = v+" px";
+      if(f==="mxDot") $("mxDotVal").textContent = v+" px";
+      if(f==="mxColW") $("mxColWVal").textContent = v+" px";
+    }
+    render();
+  });
+});
+CHECKS.forEach(f=>$(f).addEventListener("change", e=>{ state[f]=e.target.checked; render(); }));
+$("clearPeps").addEventListener("click", ()=>{ state.peps=""; state.sites=""; state.example=false; syncInputs(); render(); toast("Peptides and sites cleared"); });
+
+/* ---------- figure interaction ---------- */
+const paper = $("paper"), pop = $("pop");
+let drag = null;
+function hitAt(x,y){ const el = document.elementFromPoint(x,y); return el && el.closest ? el.closest("[data-i]") : null; }
+function markSel(a,b){
+  const lo=Math.min(a,b), hi=Math.max(a,b);
+  paper.querySelectorAll(".hit").forEach(h=>{ const i=+h.dataset.i; h.classList.toggle("sel", i>=lo&&i<=hi); });
+}
+paper.addEventListener("pointerdown", e=>{
+  const h = e.target.closest && e.target.closest("[data-i]"); if(!h || e.button!==0) return;
+  drag = {a:+h.dataset.i, b:+h.dataset.i, el:h, pointerType:e.pointerType};
+  markSel(drag.a, drag.b);
+});
+window.addEventListener("pointermove", e=>{
+  if(!drag || drag.pointerType==="touch") return;
+  const h = hitAt(e.clientX, e.clientY);
+  if(h && +h.dataset.i!==drag.b){ drag.b=+h.dataset.i; markSel(drag.a, drag.b); }
+});
+window.addEventListener("pointerup", ()=>{
+  if(!drag) return;
+  const {a,b,el} = drag; drag = null;
+  paper.querySelectorAll(".hit.sel").forEach(h=>h.classList.remove("sel"));
+  if(a===b){ openPop(a, el); return; }
+  const lo=Math.min(a,b), hi=Math.max(a,b);
+  const line = model.seq.slice(lo,hi+1) + " @" + (lo+model.off);
+  state.peps = (state.peps.replace(/\s+$/,"") + (state.peps.trim()?"\n":"") + line);
+  state.example = false; syncInputs(); render();
+  toast(`Added peptide ${lo+model.off}–${hi+model.off}`);
+});
+
+const POP_MODS = ["me1","me2","me3","ac","ph","ox","ub","cr","pr","bu","su","la","hib","cit"];
+function chipIcon(k){ return `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">${iconSVG(k,9,9,14,"Arial, sans-serif")}</svg>`; }
+function siteHas(i,key){ return model.siteList.some(s=>s.i===i && s.key===key && !s.term && !s.combo); }
+function openPop(i, anchor){
+  const res = model.seq[i], pos = i+model.off, mods = model.resMods[i];
+  const custom = [...mods.keys()].filter(k=>!MODS[k]);
+  const keys = POP_MODS.concat(custom);
+  const pp = model.peps.filter(p=>p.s<=i&&p.e>=i);
+  pop.innerHTML =
+    `<h3><span>${res}${pos}</span><button class="ghost" id="popClose" type="button" aria-label="Close">✕</button></h3>` +
+    `<div class="sub">${pp.length ? "In peptide " + pp.map(p=>`${p.s+model.off}–${p.e+model.off}`).join(", ") : "Not covered by a detected peptide"}</div>` +
+    `<div class="chips">${keys.map(k=>{
+      const src = mods.get(k), locked = (src==="pep"||src==="combo") && !siteHas(i,k);
+      return `<button type="button" class="chip${src?" on":""}${locked?" locked":""}" data-k="${esc(k)}" ${locked?`title="Comes from a peptide line or combination — edit it in the text box"`:""}>${chipIcon(k)}${esc(modDef(k).label)}</button>`;
+    }).join("")}</div>` +
+    `<div class="custom"><input id="popCustom" type="text" placeholder="Other, e.g. me2a or +86.037"><button type="button" id="popAdd">Add</button></div>` +
+    `<p class="help">Faded marks come from a peptide line or a combination and are edited in the text boxes.</p>`;
+  const wr = $("paperWrap").getBoundingClientRect(), ar = anchor.getBoundingClientRect();
+  pop.hidden = false;
+  let left = ar.left - wr.left + ar.width/2 - pop.offsetWidth/2;
+  left = Math.max(4, Math.min(left, wr.width - pop.offsetWidth - 4));
+  pop.style.left = left+"px"; pop.style.top = (ar.bottom - wr.top + 6)+"px";
+  pop.dataset.i = i;
+  pop.querySelectorAll(".chip").forEach(c=>c.addEventListener("click", ()=>{
+    if(c.classList.contains("locked")) return;
+    toggleSite(i, c.dataset.k);
+  }));
+  const addCustom = ()=>{ const v=$("popCustom").value.trim(); if(v){ const k=resolveMod(v); if(!siteHas(i,k)) toggleSite(i,k,v); } };
+  $("popAdd").addEventListener("click", addCustom);
+  $("popCustom").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); addCustom(); } });
+  $("popClose").addEventListener("click", closePop);
+}
+function closePop(){ pop.hidden = true; }
+function toggleSite(i, key, raw){
+  const res = model.seq[i], pos = i+model.off;
+  let toks = siteEntries(state.sites);
+  if(siteHas(i,key)){
+    // only single-site entries are toggled here; combinations are edited in the text box
+    toks = toks.filter(t=>{ if(entryParts(t).length>1) return true; const p=parseSiteToken(t); return !(p && p.pos===pos && p.res===res && resolveMod(p.mod)===key); });
+  } else {
+    const label = MODS[key] ? key : (raw || modDef(key).label);
+    toks.push(res+pos+label);
+  }
+  state.sites = toks.join(", "); state.example = false;
+  syncInputs(); render();
+  const anchor = paper.querySelector(`[data-i="${i}"]`); if(anchor) openPop(i, anchor);
+}
+document.addEventListener("pointerdown", e=>{ if(!pop.hidden && !pop.contains(e.target) && !(e.target.closest && e.target.closest("[data-i]"))) closePop(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closePop(); });
+
+/* ---------- export ---------- */
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),1800); }
+// Downloads only work when the page is opened directly (e.g. GitHub Pages), not inside an embedded viewer
+const canDownload = (()=>{ try{ return window.self === window.top; }catch(e){ return false; } })();
+function fileBase(suffix){ return ((state.title||"histone").trim().replace(/[^\w.-]+/g,"_") || "histone") + suffix; }
+function download(name, href){ const a=document.createElement("a"); a.href=href; a.download=name; document.body.appendChild(a); a.click(); a.remove(); }
+function wireExport(ids, getSvg){
+  const showFallback = svg=>{ $(ids.svgOut).hidden=false; const ta=$(ids.svgFb); ta.value=svg; ta.focus(); ta.select(); };
+  $(ids.copySvg).addEventListener("click", ()=>{
+    const svg = getSvg();
+    try{
+      navigator.clipboard.writeText(svg).then(()=>{ $(ids.svgOut).hidden=true; toast("SVG copied — paste into Illustrator, Inkscape or PowerPoint"); }, ()=>showFallback(svg));
+    }catch(e){ showFallback(svg); }
+  });
+  const makeCanvas = ()=>new Promise((resolve,reject)=>{
+    const svg = getSvg(), scale = +$("pngScale").value, img = new Image();
+    img.onload = ()=>{
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width*scale); c.height = Math.round(img.height*scale);
+      const ctx = c.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height);
+      ctx.drawImage(img,0,0,c.width,c.height); resolve(c);
+    };
+    img.onerror = reject;
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  });
+  const showPng = ()=>makeCanvas().then(c=>{
+    $(ids.img).src = c.toDataURL("image/png");
+    $(ids.pngOut).hidden = false; $(ids.svgOut).hidden = true;
+    $(ids.pngOut).scrollIntoView({block:"nearest"});
+  }).catch(()=>toast("Couldn't draw the PNG"));
+  $(ids.makePng).addEventListener("click", showPng);
+  if(canDownload){
+    $(ids.dlSvg).hidden = false; $(ids.dlPng).hidden = false;
+    $(ids.dlSvg).addEventListener("click", ()=>{
+      const url = URL.createObjectURL(new Blob([getSvg()], {type:"image/svg+xml"}));
+      download(fileBase(ids.suffix+".svg"), url); setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    });
+    $(ids.dlPng).addEventListener("click", ()=>makeCanvas().then(c=>download(fileBase(ids.suffix+".png"), c.toDataURL("image/png"))).catch(()=>toast("Couldn't draw the PNG")));
+  }
+  $(ids.copyPng).addEventListener("click", ()=>{
+    const fail = ()=>{ showPng(); toast("Copying images is blocked here — right-click the PNG below instead"); };
+    try{
+      if(!window.ClipboardItem || !navigator.clipboard || !navigator.clipboard.write) return fail();
+      const item = new ClipboardItem({"image/png": makeCanvas().then(c=>new Promise(r=>c.toBlob(r,"image/png")))});
+      navigator.clipboard.write([item]).then(()=>toast("PNG copied"), fail);
+    }catch(e){ fail(); }
+  });
+}
+wireExport({copySvg:"copySvg",makePng:"makePng",copyPng:"copyPng",pngOut:"pngOut",img:"pngImg",svgOut:"svgOut",svgFb:"svgFallback",dlSvg:"dlSvg",dlPng:"dlPng",suffix:"_coverage"}, exportSVG);
+wireExport({copySvg:"mxCopySvg",makePng:"mxMakePng",copyPng:"mxCopyPng",pngOut:"mxPngOut",img:"mxPngImg",svgOut:"mxSvgOut",svgFb:"mxSvgFallback",dlSvg:"mxDlSvg",dlPng:"mxDlPng",suffix:"_proteoforms"},
+  ()=>renderMatrix(model, mxX || buildMatrix(model)));
+
+syncInputs();
+render();
+})();
+</script>
+
+</body>
+</html>
